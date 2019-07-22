@@ -1,0 +1,110 @@
+---
+title: "Practical Machine Learning - project"
+author: "Srinath"
+output: rmarkdown::github_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE)
+```
+
+#Loading the Packages
+```{r Packages Installed}
+library(caret)
+library(doParallel)
+library(ggplot2)
+library(randomForest)
+library(xgboost)
+```
+Loading the required packages. For this project, we need caret package to perform model training and prediction. ggplot2 to visualize the data. I've chosen two algorithms, randomForest and xgboost to run on this dataset. We'll use parallel processing to speed up the process. For this, we use doParallel package.
+
+#Loading the train data
+```{r Getting started}
+#Loading the train data
+pml_train=read.csv(file.choose(), header=T, sep=",", na.strings=c(""," ",NA))
+```
+Loading the train dataset into the variable 'pml_train' from my local machine using the functions read.csv and file.choose. The data has some columns with many NA's, some with empty spaces and some with " " characters. This can be dealt with na.strings option inside the read.csv function.
+
+#Preprocessing
+```{r Preprocessing}
+#Sorting the columns based on number of NA's
+sapply(pml_train, function(x){sum(is.na(x))})[colSums(is.na(pml_train)) != 0]
+#Removing the columns with more than 10000 NA's
+preproc_train<-pml_train[ ,colSums(is.na(pml_train))<=500]
+#Removing the first 6 columns as they're of no use
+preproc_train<-preproc_train[,-(1:6)]
+```
+Using the sapply function to see the columns with number of NA's in this dataset. After that I've removed the columns with more than 50% of data with NA's. Actually there are many NA's. There are 100 columns with NA's. Later removing the 1st 6 columns in database which include name, raw timestamp etc So we're left with 54 columns with classe (dependant variable) included.
+
+```{r Data Partitions}
+#creating partitions in train data
+inTrain<-createDataPartition(y=preproc_train$classe, p=0.7, list=FALSE)
+training<-preproc_train[inTrain, ]
+testing<-preproc_train[-inTrain, ]
+```
+Splitting the train data into training and testing in 70:30 ratio.
+
+#Model Training
+```{r Model Training}
+#setting a seed
+set.seed(11207)
+#creating a random forest model with cv
+cl<-makeCluster(detectCores())
+registerDoParallel(cl)
+modrf<-train(classe~., data=training, method="rf", preProcess = c("center", "scale"), trControl=trainControl(method="repeatedcv", number=5, repeats=5))
+saveRDS(modrf, file = "RF.rds")
+#creating a xgb linear model
+modxgb<-train(classe~., data=training, method="xgbLinear", preProcess = c("center", "scale"), trControl=trainControl(method="cv", number=5))
+saveRDS(modxgb, file = "XGB.rds")
+stopCluster(cl)
+#modrf<-readRDS("RF.rds")
+#modxgb<-readRDS("XGB.rds")
+```
+Setting a seed and training random forest and XG Boost models with the training data. Saving the models using saveRDS function as knitting the .Rmd file takes forever. Using readRDS to load the models and predict the output.
+
+#Predicting on Train data
+```{r Prediction on split data}
+#predicting training split data with rf model
+predrf<-predict(modrf, testing)
+confusionMatrix(predrf, testing$classe)$overall[1]
+#predicting training split data with xgb tree model
+predxgb<-predict(modxgb, testing)
+confusionMatrix(predxgb, testing$classe)$overall[1]
+#results
+table(predrf, predxgb)
+```
+Predictions are made for both random forest and XG Boost models. The Accuracy of the models on training set is also checked. We can see that the accuracy is almost same for both the models but random forest model outperforms the XG Boosting model. From the table comparing the predictions of both the models, we can infer that they've almost same predictions except for 1-2 differences for classes C, D and E.
+
+#Variable Importance
+```{r Comparing the models}
+plot(modrf$finalModel)
+plot(varImp(modrf), main="Random forest")
+plot(varImp(modxgb), main="XG Boosting")
+```
+The final model of the Random forest can be seen here. We see that the error approaches to 0 with the number of trees equal to 15-20 approximately. Rest, it stays close zero. From both the variable importance plots, we can say that the predictors num_window, roll_belt, pitch_forearm are the top 3 predictors in both the models. The remaining predictors slightly differ in their importance levels to the model.
+
+#Using the test data
+```{r Loading and Preprocessing the test data}
+#Loading the train data
+pml_test=read.csv(file.choose(), header=T, sep=",", na.strings=c(""," ",NA))
+#Sorting the columns based on number of NA's
+sapply(pml_test, function(x){sum(is.na(x))})[colSums(is.na(pml_test)) != 0]
+#Removing the columns with more than 10000 NA's
+preproc_test<-pml_test[ ,colSums(is.na(pml_test))<=2]
+#Removing the first 6 columns as they're of no use
+final_test<-preproc_test[,-(1:6)]
+final_test<-final_test[,-54]
+```
+Carrying out the same preprocessing for the test dataset which include checking and deleting the columns with missing values, removing unnecessary predictors.
+
+#Results
+```{r Prediction on test data}
+#predicting testing data with rf model
+predrft<-predict(modrf, final_test)
+#predicting testing data with xgb linear model
+predxgbt<-predict(modxgb, final_test)
+#Table showing the results from both models
+predrft
+table(predrft, predxgbt)
+```
+The predictions for the 20 test observations with both the models can be seen here. We see that both the models predict the same for the test dataset although their accuracy differs by a little. With this, we can think that the out of sample error is very little as per these two models It is close to zero.
