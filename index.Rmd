@@ -1,6 +1,6 @@
 ---
 title: "Practical Machine Learning - project"
-author: "Srinath"
+author: "Martin Mwiti"
 output: rmarkdown::github_document
 ---
 
