@@ -1,6 +1,6 @@
 Practical Machine Learning - project
 ================
-Srinath
+Martin Mwiti
 
 Loading the Packages
 ====================
